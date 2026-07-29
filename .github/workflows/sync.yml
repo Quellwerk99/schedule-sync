@@ -1,0 +1,48 @@
+name: sync
+
+on:
+  schedule:
+    # Alle 10 Minuten (GitHub führt das manchmal mit etwas Verzögerung aus)
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}   # Erlaubt manuelles Starten zum Testen
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies
+        run: pip install requests
+
+      # Merker-Datei zwischen den Läufen aufbewahren (Dedup der Nachrichten)
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: sync-state-${{ github.run_id }}
+          restore-keys: sync-state-
+
+      - name: Run
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          DATA_URL: ${{ secrets.DATA_URL }}
+          ITEM_PREFIX: ${{ secrets.ITEM_PREFIX }}
+          DETAIL_URL_TEMPLATE: ${{ secrets.DETAIL_URL_TEMPLATE }}
+          PAGE_URL: ${{ secrets.PAGE_URL }}
+        run: python sync.py --once
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: sync-state-${{ github.run_id }}
